@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenMV 铁轨测距演示</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            color: #fff;
+        }
+        h1 {
+            margin-bottom: 20px;
+            font-size: 28px;
+            text-shadow: 0 0 10px rgba(0,255,255,0.5);
+        }
+        .container {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .scene-container {
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        #scene3d {
+            border-radius: 10px;
+        }
+        .controls {
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            padding: 25px;
+            min-width: 300px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        .control-group { margin-bottom: 25px; }
+        .control-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #aaa;
+        }
+        .control-group .value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #00ffff;
+            margin-bottom: 10px;
+        }
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: #333;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #00ffff;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0,255,255,0.5);
+        }
+        .data-display {
+            background: rgba(0,255,255,0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        .data-row span:last-child {
+            color: #00ff88;
+            font-weight: bold;
+        }
+        .tip {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #888;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>OpenMV 铁轨测距系统演示</h1>
+    <div class="container">
+        <div class="scene-container">
+            <canvas id="scene3d" width="600" height="500"></canvas>
+            <div class="tip">拖动旋转视角 | 点击画布开始/停止自动演示</div>
+        </div>
+        <div class="controls">
+            <div class="control-group">
+                <label>水平移动 (左右平移)</label>
+                <div class="value" id="moveValue">0 cm</div>
+                <input type="range" id="horizontalMove" min="-50" max="50" value="0">
+            </div>
+            <div class="control-group">
+                <label>水平转动 (Yaw偏航角)</label>
+                <div class="value" id="yawValue">0°</div>
+                <input type="range" id="yawAngle" min="-45" max="45" value="0">
+            </div>
+            <div class="control-group">
+                <label>俯仰转动 (Pitch俯仰角)</label>
+                <div class="value" id="pitchValue">0°</div>
+                <input type="range" id="pitchAngle" min="-30" max="30" value="0">
+            </div>
+            <div class="control-group">
+                <label>翻滚转动 (Roll翻滚角)</label>
+                <div class="value" id="rollValue">0°</div>
+                <input type="range" id="rollAngle" min="-35" max="35" value="0">
+            </div>
+            <div class="data-display">
+                <div class="data-row"><span>测量距离:</span><span id="measuredDist">29.3 cm</span></div>
+                <div class="data-row"><span>实际距离:</span><span id="actualDist">29.3 cm</span></div>
+                <div class="data-row"><span>误差:</span><span id="errorDist">0.0 cm</span></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.min.js"></script>
+    <script>
+        // 场景设置
+        const canvas = document.getElementById('scene3d');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+
+        const camera = new THREE.PerspectiveCamera(60, canvas.width / canvas.height, 0.1, 1000);
+        camera.position.set(0, 8, 12);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+        renderer.setSize(canvas.width, canvas.height);
+        renderer.shadowMap.enabled = true;
+
+        // 光照
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(10, 20, 10);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // 地面
+        const groundGeo = new THREE.PlaneGeometry(50, 50);
+        const groundMat = new THREE.MeshLambertMaterial({ color: 0x3d6b35 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -0.5;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // 碎石路基
+        const ballastGeo = new THREE.BoxGeometry(3, 0.3, 50);
+        const ballastMat = new THREE.MeshLambertMaterial({ color: 0x7a7a7a });
+        const ballast = new THREE.Mesh(ballastGeo, ballastMat);
+        ballast.position.y = -0.35;
+        ballast.receiveShadow = true;
+        scene.add(ballast);
+
+        // 铁轨 - 两根，间距拉大
+        function createRail(x) {
+            const railGroup = new THREE.Group();
+
+            // 铁轨主体
+            const railGeo = new THREE.BoxGeometry(0.15, 0.2, 50);
+            const railMat = new THREE.MeshLambertMaterial({ color: 0x4a4a4a });
+            const rail = new THREE.Mesh(railGeo, railMat);
+            rail.position.set(x, 0, 0);
+            rail.castShadow = true;
+            railGroup.add(rail);
+
+            return railGroup;
+        }
+        scene.add(createRail(-1.5));  // 左铁轨
+        scene.add(createRail(1.5));   // 右铁轨，间距3米
+
+        // 枕木
+        for (let z = -24; z <= 24; z += 1.5) {
+            const tieGeo = new THREE.BoxGeometry(2.5, 0.15, 0.3);
+            const tieMat = new THREE.MeshLambertMaterial({ color: 0x5c4033 });
+            const tie = new THREE.Mesh(tieGeo, tieMat);
+            tie.position.set(0, -0.32, z);
+            tie.receiveShadow = true;
+            scene.add(tie);
+        }
+
+        // OpenMV摄像头
+        const openmvGroup = new THREE.Group();
+
+        // 主体
+        const bodyGeo = new THREE.BoxGeometry(1.2, 0.8, 0.4);
+        const bodyMat = new THREE.MeshLambertMaterial({ color: 0xff6600 });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.castShadow = true;
+        openmvGroup.add(body);
+
+        // 镜头 - 朝下
+        const lensGeo = new THREE.CylinderGeometry(0.2, 0.25, 0.3, 16);
+        const lensMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+        const lens = new THREE.Mesh(lensGeo, lensMat);
+        lens.rotation.x = Math.PI / 2;
+        lens.position.y = -0.5;
+        lens.castShadow = true;
+        openmvGroup.add(lens);
+
+        // 镜头玻璃
+        const glassGeo = new THREE.CircleGeometry(0.2, 16);
+        const glassMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+        const glass = new THREE.Mesh(glassGeo, glassMat);
+        glass.rotation.x = Math.PI / 2;
+        glass.position.y = -0.66;
+        openmvGroup.add(glass);
+
+        // LED
+        const ledGeo = new THREE.SphereGeometry(0.08, 8, 8);
+        const ledMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        const led = new THREE.Mesh(ledGeo, ledMat);
+        led.position.set(0.5, 0.35, 0.15);
+        openmvGroup.add(led);
+
+        // USB接口
+        const usbGeo = new THREE.BoxGeometry(0.3, 0.1, 0.15);
+        const usbMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+        const usb = new THREE.Mesh(usbGeo, usbMat);
+        usb.position.set(0, 0.45, 0);
+        openmvGroup.add(usb);
+
+        openmvGroup.position.set(1.5, 3, 0);  // 在右铁轨正上方
+        scene.add(openmvGroup);
+
+        // 视场锥形
+        const fovGroup = new THREE.Group();
+        const fovGeo = new THREE.ConeGeometry(2, 6, 4, 1, true);
+        const fovMat = new THREE.MeshBasicMaterial({
+            color: 0x00ffff,
+            transparent: true,
+            opacity: 0.15,
+            side: THREE.DoubleSide
+        });
+        const fovCone = new THREE.Mesh(fovGeo, fovMat);
+        fovCone.rotation.x = Math.PI;
+        fovCone.position.y = -3.5;
+        fovGroup.add(fovCone);
+
+        // 视场边缘线
+        const fovEdges = new THREE.EdgesGeometry(fovGeo);
+        const fovLineMat = new THREE.LineBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.5 });
+        const fovLine = new THREE.LineSegments(fovEdges, fovLineMat);
+        fovLine.rotation.x = Math.PI;
+        fovLine.position.y = -3.5;
+        fovGroup.add(fovLine);
+
+        openmvGroup.add(fovGroup);
+
+        // 控制参数
+        let horizontalMove = 0;
+        let yawAngle = 0;
+        let pitchAngle = 0;
+        let rollAngle = 0;
+        const baseDistance = 29.3;
+
+        // 绑定控件
+        document.getElementById('horizontalMove').addEventListener('input', (e) => {
+            horizontalMove = parseFloat(e.target.value);
+            document.getElementById('moveValue').textContent = horizontalMove + ' cm';
+            updateOpenMV();
+        });
+
+        document.getElementById('yawAngle').addEventListener('input', (e) => {
+            yawAngle = parseFloat(e.target.value);
+            document.getElementById('yawValue').textContent = yawAngle + '°';
+            updateOpenMV();
+        });
+
+        document.getElementById('pitchAngle').addEventListener('input', (e) => {
+            pitchAngle = parseFloat(e.target.value);
+            document.getElementById('pitchValue').textContent = pitchAngle + '°';
+            updateOpenMV();
+        });
+
+        document.getElementById('rollAngle').addEventListener('input', (e) => {
+            rollAngle = parseFloat(e.target.value);
+            document.getElementById('rollValue').textContent = rollAngle + '°';
+            updateOpenMV();
+        });
+
+        function updateOpenMV() {
+            // 水平移动
+            openmvGroup.position.x = 1.5 + horizontalMove * 0.05;
+
+            // 重置旋转
+            openmvGroup.rotation.set(0, 0, 0);
+
+            // 应用旋转 (Yaw=Y轴, Pitch=X轴, Roll=Z轴)
+            openmvGroup.rotateY(yawAngle * Math.PI / 180);  // 水平转动
+            openmvGroup.rotateX(pitchAngle * Math.PI / 180); // 俯仰转动
+            openmvGroup.rotateZ(rollAngle * Math.PI / 180);  // 翻滚转动
+
+            updateData();
+        }
+
+        function calculateMeasuredDistance() {
+            let dist = baseDistance;
+            dist += Math.abs(horizontalMove) * 0.01;
+
+            if (Math.abs(yawAngle) > 1) {
+                const yawRad = yawAngle * Math.PI / 180;
+                dist = dist / Math.cos(yawRad * 0.8);
+            }
+
+            if (pitchAngle > 0) {
+                if (pitchAngle <= 10) {
+                    dist *= (1 + 0.0032 * pitchAngle);
+                } else if (pitchAngle <= 20) {
+                    dist *= (1 + 0.0032 * 10 + 0.0058 * (pitchAngle - 10));
+                } else if (pitchAngle <= 30) {
+                    dist *= (1 + 0.0032 * 10 + 0.0058 * 10 + 0.009 * (pitchAngle - 20));
+                }
+            } else {
+                const absPitch = Math.abs(pitchAngle);
+                dist *= (1 - 0.004 * absPitch);
+            }
+
+            if (Math.abs(rollAngle) > 1) {
+                const rollRad = rollAngle * Math.PI / 180;
+                const cosRoll = Math.cos(rollRad);
+                const absRoll = Math.abs(rollAngle);
+                let rollFactor;
+                if (absRoll <= 15) {
+                    rollFactor = Math.pow(cosRoll, 2.5);
+                } else if (absRoll <= 30) {
+                    rollFactor = Math.pow(cosRoll, 2.0);
+                } else {
+                    rollFactor = Math.pow(cosRoll, 2.0);
+                }
+                dist = dist / rollFactor;
+            }
+
+            return dist;
+        }
+
+        function updateData() {
+            const measured = calculateMeasuredDistance();
+            const actual = baseDistance;
+            const error = measured - actual;
+
+            document.getElementById('measuredDist').textContent = measured.toFixed(1) + ' cm';
+            document.getElementById('actualDist').textContent = actual.toFixed(1) + ' cm';
+            document.getElementById('errorDist').textContent = error.toFixed(2) + ' cm';
+
+            const errorSpan = document.getElementById('errorDist');
+            if (Math.abs(error) <= 0.3) {
+                errorSpan.style.color = '#00ff00';
+            } else if (Math.abs(error) <= 0.5) {
+                errorSpan.style.color = '#ffff00';
+            } else {
+                errorSpan.style.color = '#ff0000';
+            }
+        }
+
+        // 鼠标拖动旋转视角
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        let cameraAngleX = 0;
+        let cameraAngleY = 0.5;
+
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+
+            const deltaX = e.clientX - previousMousePosition.x;
+            const deltaY = e.clientY - previousMousePosition.y;
+
+            cameraAngleX += deltaX * 0.01;
+            cameraAngleY = Math.max(0.1, Math.min(1.5, cameraAngleY + deltaY * 0.01));
+
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+        });
+
+        canvas.addEventListener('mouseup', () => { isDragging = false; });
+        canvas.addEventListener('mouseleave', () => { isDragging = false; });
+
+        // 自动演示
+        let animationPhase = 0;
+        let isAnimating = false;
+
+        canvas.addEventListener('click', (e) => {
+            if (e.target === canvas && !isDragging) {
+                isAnimating = !isAnimating;
+            }
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (isAnimating) {
+                animationPhase += 0.015;
+                const phase = animationPhase % (Math.PI * 4);
+
+                if (phase < Math.PI) {
+                    horizontalMove = Math.sin(phase) * 30;
+                    yawAngle = 0;
+                    pitchAngle = 0;
+                    rollAngle = 0;
+                } else if (phase < Math.PI * 2) {
+                    horizontalMove = 0;
+                    yawAngle = Math.sin(phase) * 30;
+                    pitchAngle = 0;
+                    rollAngle = 0;
+                } else if (phase < Math.PI * 3) {
+                    horizontalMove = 0;
+                    yawAngle = 0;
+                    pitchAngle = Math.sin(phase) * 25;
+                    rollAngle = 0;
+                } else {
+                    horizontalMove = 0;
+                    yawAngle = 0;
+                    pitchAngle = 0;
+                    rollAngle = Math.sin(phase) * 30;
+                }
+
+                document.getElementById('horizontalMove').value = horizontalMove;
+                document.getElementById('moveValue').textContent = horizontalMove.toFixed(0) + ' cm';
+                document.getElementById('yawAngle').value = yawAngle;
+                document.getElementById('yawValue').textContent = yawAngle.toFixed(0) + '°';
+                document.getElementById('pitchAngle').value = pitchAngle;
+                document.getElementById('pitchValue').textContent = pitchAngle.toFixed(0) + '°';
+                document.getElementById('rollAngle').value = rollAngle;
+                document.getElementById('rollValue').textContent = rollAngle.toFixed(0) + '°';
+
+                updateOpenMV();
+            }
+
+            // 更新相机位置
+            camera.position.x = Math.sin(cameraAngleX) * 15;
+            camera.position.z = Math.cos(cameraAngleX) * 15;
+            camera.position.y = 8 + cameraAngleY * 10;
+            camera.lookAt(0, 1, 0);
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+    </script>
+</body>
+</html>

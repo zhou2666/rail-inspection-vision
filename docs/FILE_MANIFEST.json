@@ -1,0 +1,52 @@
+[
+  {
+    "path": "k230/rail_k230.py",
+    "bytes": 8638,
+    "sha256": "076e5b602dc61d1866992fdcd03b17012fe85bbe2de92412e8d68d68d0354563"
+  },
+  {
+    "path": "openmv/A_MV_task_ws.py",
+    "bytes": 16195,
+    "sha256": "db275606ab3c4a4e62841500ae990addb93cd04d5e83f902f7dda503988178ac"
+  },
+  {
+    "path": "models/1best.kmodel",
+    "bytes": 3362480,
+    "sha256": "3194c25e7282637fb117538392a2e27643d112ea56ba8a82b9c8c7cdd32af533"
+  },
+  {
+    "path": "models/1best.onnx",
+    "bytes": 10447687,
+    "sha256": "5da01896c54c4332c51756af94ae01db943418e40eac8003fbc1870ca4547fe0"
+  },
+  {
+    "path": "models/best.kmodel",
+    "bytes": 3353192,
+    "sha256": "e16554d2b91e0553432b4c1e0d28af52a6f81dec6fc224b21edf96600be99c87"
+  },
+  {
+    "path": "demo/rail_distance_demo.html",
+    "bytes": 17222,
+    "sha256": "1d894767f21864170db1be4166abb349125dc8b30df867963574c54af9bdec4f"
+  },
+  {
+    "path": "datasets/reference/README.dataset.txt",
+    "bytes": 127,
+    "sha256": "ef0946f89f52e092bf341c4ad5fef42eef7511ee294a718a2a762ced214181b4"
+  },
+  {
+    "path": "datasets/reference/README.roboflow.txt",
+    "bytes": 983,
+    "sha256": "b81bcdb913d71be77a1c24d96f1469f7d3a69ae1e313e1b55b644eeb0704362a"
+  },
+  {
+    "path": "datasets/reference/data.original.yaml",
+    "bytes": 250,
+    "sha256": "de7b47a6dda7f216c96675586b306a179a329e645abc235cbea89af7486d6fc0"
+  },
+  {
+    "path": "tools/yuv2mp4.bat",
+    "bytes": 307,
+    "sha256": "5f5043833647ffeadd0f8512c278cf154146ea3da89247bc72542929419921f1"
+  }
+]

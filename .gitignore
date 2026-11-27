@@ -1,0 +1,44 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+# Personal documents, recordings, flight logs and installers
+*.doc
+*.docx
+*.ppt
+*.pptx
+*.pdf
+*.mp4
+*.yuv
+*.bin
+*.ulg
+*.tlog
+*.log
+*.exe
+*.dll
+*.img
+*.img.gz
+*.qkdownloading
+*.zip
+*.7z
+# Keep selected models; exclude accidental additional weights
+*.pt
+*.pth
+*.onnx
+*.kmodel
+!models/1best.onnx
+!models/1best.kmodel
+!models/best.kmodel
+# Full datasets are sourced separately
+datasets/train/
+datasets/valid/
+datasets/test/

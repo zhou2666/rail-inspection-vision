@@ -1,0 +1,8 @@
+# Preserve original source and provenance bytes for FILE_MANIFEST.json checks.
+k230/*.py -text
+openmv/*.py -text
+demo/*.html -text
+datasets/reference/* -text
+tools/*.bat -text
+models/*.onnx binary
+models/*.kmodel binary
